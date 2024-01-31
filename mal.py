@@ -112,8 +112,13 @@ with open("token.json") as f:
 # QBITTORRENTAPI_USERNAME=your_username
 # QBITTORRENTAPI_PASSWORD=your_password
 # QBITTORRENTAPI_HOST=qbittorrent_server_ip:port
-qb_client = qbittorrentapi.Client()
-qb_client.auth_log_in()
+QBITTORRENT = True
+try:
+    qb_client = qbittorrentapi.Client()
+    qb_client.auth_log_in()
+except (requests.exceptions.InvalidURL, qbittorrentapi.exceptions.APIConnectionError):
+    QBITTORRENT = False
+    print("qBittorrent server not found, check your environment variables.")
 
 #################################
 # Utility Methods               #
@@ -274,6 +279,8 @@ commands = {"c": cmd_check_status,
             "h": cmd_help,
             "?": cmd_help}
 
+if not QBITTORRENT:
+    commands["q"] = lambda: print("qBittorrent server not found, check your environment variables.")
 
 load_list()
 while True:
@@ -285,4 +292,5 @@ while True:
         save_list()
         break
 
-qb_client.auth_log_out()    # make sure we log out of our qBittorrent session
+if QBITTORRENT:
+    qb_client.auth_log_out()    # make sure we log out of our qBittorrent session
