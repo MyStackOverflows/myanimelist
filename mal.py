@@ -1,4 +1,4 @@
-import requests, ast, warnings, json, qbittorrentapi, time, multiprocessing
+import requests, ast, warnings, json, qbittorrentapi, time, multiprocessing, pickle
 # for some reason the MAL API returns the 'main_picture' field even without asking for it and it
 # contains many instances of '\/' which throw a bunch of warnings on screen, so just supress them
 warnings.filterwarnings(action="ignore", category=SyntaxWarning)
@@ -96,7 +96,7 @@ class LoadingBar:
 # Initial Setup                 #
 #################################
 
-
+CACHE_FILE = "cache.bin"
 shows: 'list[Show]' = []  # was id_list
 
 # https://myanimelist.net/apiconfig/references/api/v2 <-- api docs
@@ -187,10 +187,19 @@ def load_list():
         while "\n" in ids:
             ids.remove("\n")
         id_list += [int(i) for i in ids]
+
+    try:
+        with open(CACHE_FILE, "rb") as f:
+            shows += pickle.load(f)     # load cached shows (ie shows that have finished airing)
+    except FileNotFoundError:
+        print("No cache file found. If this isn't your first run of the script, make sure you're in the right directory.")
+
     x = LoadingBar("Loading data from myanimelist.net... ")
     x.start_loading()
     for id in id_list:
-        shows.append(Show(id))
+        cached = bool(sum([show for show in shows if show.id == id]))
+        if not cached:  # minimize our calls to MAL API
+            shows.append(Show(id))
     x.stop_loading()
 
 
@@ -199,6 +208,9 @@ def save_list():
     f.write(",".join([str(i.id) for i in shows]))
     f.close()
     print("\nList saved.")
+    with open(CACHE_FILE, "wb") as f:
+        pickle.dump([show for show in shows if show.is_completed], f)   # cache shows that have finished airing
+    print("Cached completed shows.")
 
 
 #################################
