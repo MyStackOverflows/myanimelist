@@ -5,3 +5,7 @@ Simple python script that offers a simple centralized method of bulk checking if
  - `QBITTORRENTAPI_HOST`: `qbittorrent_server_ip:port`
  - `QBITTORRENTAPI_USERNAME`: `your_username`
  - `QBITTORRENTAPI_PASSWORD`: `your_password`
+
+### Pre-requisites
+ - Python 3.10+
+ - `qbittorrent-api` package
