@@ -98,6 +98,7 @@ class LoadingBar:
     def stop_loading(self):
         self.process.kill()
         print(f"\r{' ' * (len(self.prefix) + 5)}", end="\r", flush=True)  # the +5 is just for good measure in case the cycle we're using has >1 width etc
+        print(f"{self.prefix}done.")
 
 
 #################################
