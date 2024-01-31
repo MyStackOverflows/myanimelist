@@ -3,6 +3,10 @@ import requests, ast, warnings, json, qbittorrentapi, time, multiprocessing, pic
 # contains many instances of '\/' which throw a bunch of warnings on screen, so just supress them
 warnings.filterwarnings(action="ignore", category=SyntaxWarning)
 
+#################################
+# Class Definitions             #
+#################################
+
 
 class Show:
     name: str           # name (doh)
@@ -77,9 +81,13 @@ class LoadingBar:
 
     def loading(self):
         cycle = ["-", "\\", "|", "/"]
+        cycle = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        cycle = ["⠋", "⠙", "⠚", "⠞", "⠖", "⠦", "⠴", "⠲", "⠳", "⠓"]
+        cycle = ["⢎⡰", "⢎⡡", "⢎⡑", "⢎⠱", "⠎⡱", "⢊⡱", "⢌⡱", "⢆⡱"]
+        length = len(cycle)
         index = 0
         while True:
-            print(f"\r {self.prefix}{cycle[index % 4]}", end="\r", flush=True)
+            print(f"\r {self.prefix}{cycle[index % length]}", end="\r", flush=True)
             index += 1
             time.sleep(0.1)
 
@@ -89,7 +97,7 @@ class LoadingBar:
 
     def stop_loading(self):
         self.process.kill()
-        print(f"\r{' ' * (len(self.prefix) + 2)}", end="\r", flush=True)
+        print(f"\r{' ' * (len(self.prefix) + 5)}", end="\r", flush=True)  # the +5 is just for good measure in case the cycle we're using has >1 width etc
 
 
 #################################
@@ -195,7 +203,7 @@ def load_list():
     except FileNotFoundError:
         print("No cache file found. If this isn't your first run of the script, make sure you're in the right directory.")
 
-    x = LoadingBar("Loading data from myanimelist.net... ")
+    x = LoadingBar("Loading data from myanimelist.net for uncached shows... ")
     x.start_loading()
     for id in id_list:
         cached = bool(len([show for show in shows if show.id == id]))
@@ -212,7 +220,7 @@ def save_list():
     shows_to_cache = [show for show in shows if show.is_completed]
     with open(CACHE_FILE, "wb") as f:
         pickle.dump(shows_to_cache, f)   # cache shows that have finished airing
-    print(f"Cached {len(shows_to_cache)} 'finished airing' shows ({len(shows_to_cache)}/{len(shows)} total shows).")
+    print(f"Cached 'finished airing' shows ({len(shows_to_cache)}/{len(shows)} total shows).")
 
 
 #################################
