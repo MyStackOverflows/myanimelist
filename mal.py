@@ -79,7 +79,7 @@ class LoadingBar:
         cycle = ["-", "\\", "|", "/"]
         index = 0
         while True:
-            print(f"\r{self.prefix}{cycle[index % 4]}", end="\r", flush=True)
+            print(f"\r {self.prefix}{cycle[index % 4]}", end="\r", flush=True)
             index += 1
             time.sleep(0.1)
 
@@ -89,7 +89,7 @@ class LoadingBar:
 
     def stop_loading(self):
         self.process.kill()
-        print(f"\r{' ' * (len(self.prefix) + 1)}", end="\r", flush=True)
+        print(f"\r{' ' * (len(self.prefix) + 2)}", end="\r", flush=True)
 
 
 #################################
@@ -191,13 +191,14 @@ def load_list():
     try:
         with open(CACHE_FILE, "rb") as f:
             shows += pickle.load(f)     # load cached shows (ie shows that have finished airing)
+        print(f"Loaded {len(shows)} cached shows.")
     except FileNotFoundError:
         print("No cache file found. If this isn't your first run of the script, make sure you're in the right directory.")
 
     x = LoadingBar("Loading data from myanimelist.net... ")
     x.start_loading()
     for id in id_list:
-        cached = bool(sum([show for show in shows if show.id == id]))
+        cached = bool(len([show for show in shows if show.id == id]))
         if not cached:  # minimize our calls to MAL API
             shows.append(Show(id))
     x.stop_loading()
@@ -208,9 +209,10 @@ def save_list():
     f.write(",".join([str(i.id) for i in shows]))
     f.close()
     print("\nList saved.")
+    shows_to_cache = [show for show in shows if show.is_completed]
     with open(CACHE_FILE, "wb") as f:
-        pickle.dump([show for show in shows if show.is_completed], f)   # cache shows that have finished airing
-    print("Cached completed shows.")
+        pickle.dump(shows_to_cache, f)   # cache shows that have finished airing
+    print(f"Cached {len(shows_to_cache)} 'finished airing' shows ({len(shows_to_cache)}/{len(shows)} total shows).")
 
 
 #################################
@@ -257,14 +259,15 @@ def cmd_search_qbittorrent():
     index = get_int_input("What index do you want to search for on qBittorrent? ", True)
     if index != "cancelled":
         show = finished[index]
-        job = qb_client.search_start(show.name, "nyaasi", "all")
+        query = input("Additional search query (eg `judas`, `batch`, etc): ")
+        job = qb_client.search_start(f"{show.name}{' ' + query if len(query) > 0 else ''}", "nyaasi", "all")
         x = LoadingBar("Searching with qBittorrent... ")
         x.start_loading()
         while job.status()[0]["status"] == "Running":
             pass
         x.stop_loading()
         torrents = sorted([Torrent(i) for i in job.results()["results"]])    # sort by number of seeders
-        for i in range(10):
+        for i in range(10 if len(torrents) >= 10 else len(torrents)):
             print(f"  [{i}] : {torrents[i]}")
         index = get_int_input("What index do you want to download with qBittorrent? ", True)
         if index != "cancelled":

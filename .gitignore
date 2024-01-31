@@ -1,2 +1,4 @@
-list.txt
-token.json
+*.txt
+*.json
+*.bin
+get_new_mal_api_token.py
