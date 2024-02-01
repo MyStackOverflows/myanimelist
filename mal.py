@@ -1,4 +1,4 @@
-import requests, ast, warnings, json, qbittorrentapi, time, multiprocessing, pickle
+import requests, ast, warnings, json, qbittorrentapi, time, multiprocessing, pickle, os
 # for some reason the MAL API returns the 'main_picture' field even without asking for it and it
 # contains many instances of '\/' which throw a bunch of warnings on screen, so just supress them
 warnings.filterwarnings(action="ignore", category=SyntaxWarning)
@@ -151,6 +151,9 @@ class Main:
 
     def load_list(self) -> None:
         id_list = []
+        if not os.path.exists(self.LIST_FILE):
+            open(self.LIST_FILE, "w").close()
+            return
         for line in open(self.LIST_FILE, mode="r").readlines():
             ids = line.split(",")
             while "" in ids:
@@ -302,7 +305,7 @@ if __name__ == "__main__":
     # https://myanimelist.net/apiconfig/references/api/v2 <-- api docs
     # https://myanimelist.net/apiconfig/references/authorization <-- followed these steps to get ACCESS_TOKEN and REFRESH_TOKEN
     # load MAL API tokens
-    with open("token.json") as f:
+    with open("secret_token.json") as f:
         data = json.load(f)
         ACCESS_TOKEN = data["access_token"]
         REFRESH_TOKEN = data["refresh_token"]
