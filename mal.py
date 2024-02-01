@@ -175,6 +175,7 @@ class Main:
             cached = bool(len([show for show in self.shows if show.id == id]))
             if not cached:  # minimize our calls to MAL API
                 self.shows.append(Show(id))
+        self.shows = sorted(self.shows)
         x.stop()
 
     def save_list(self) -> None:
@@ -211,7 +212,7 @@ class Main:
                 print(show)
 
     def cmd_check_list(self) -> None:
-        print('\n'.join([str(i) for i in sorted(self.shows)]))
+        print('\n'.join([str(i) for i in self.shows]))
 
     def cmd_search_qbittorrent(self) -> None:
         finished = [show for show in self.shows if show.is_completed]
