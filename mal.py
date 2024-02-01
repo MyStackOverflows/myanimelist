@@ -303,8 +303,7 @@ def search_mal(search: str) -> []:
 
 if __name__ == "__main__":
     # https://myanimelist.net/apiconfig/references/api/v2 <-- api docs
-    # https://myanimelist.net/apiconfig/references/authorization <-- followed these steps to get ACCESS_TOKEN and REFRESH_TOKEN
-    # load MAL API tokens
+    # load MAL API tokens -> see refresh_token.py for getting tokens
     with open("secret_token.json") as f:
         data = json.load(f)
         ACCESS_TOKEN = data["access_token"]
