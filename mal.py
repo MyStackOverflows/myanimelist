@@ -1,4 +1,4 @@
-import requests, ast, warnings, json, qbittorrentapi, time, multiprocessing, pickle, os
+import requests, ast, warnings, json, qbittorrentapi, time, multiprocessing, pickle
 # for some reason the MAL API returns the 'main_picture' field even without asking for it and it
 # contains many instances of '\/' which throw a bunch of warnings on screen, so just supress them
 warnings.filterwarnings(action="ignore", category=SyntaxWarning)
@@ -6,6 +6,53 @@ warnings.filterwarnings(action="ignore", category=SyntaxWarning)
 #################################
 # Class Definitions             #
 #################################
+
+
+class MAL:
+    ACCESS_TOKEN: str
+    REFRESH_TOKEN: str
+
+    def __init__(self, token_file: str) -> None:
+        # https://myanimelist.net/apiconfig/references/api/v2 <-- api docs
+        # load MAL API tokens -> see refresh_token.py for getting tokens
+        with open(token_file) as f:
+            data = json.load(f)
+            self.ACCESS_TOKEN = data["access_token"]
+            self.REFRESH_TOKEN = data["refresh_token"]
+
+    def send_request(self, url: str) -> dict:
+        response = requests.get(url, headers={"Authorization": f"Bearer {self.ACCESS_TOKEN}"})
+        return ast.literal_eval(response.text)  # converts the json response.text field (essentially a string of response.content) into a python dict
+
+    def get_name(self, json_dict: dict):
+        name = json_dict["alternative_titles"]["en"]
+        if name == "":
+            name = json_dict["title"]
+        return name
+
+    def get_info(self, anime_id: int):
+        url = f"https://api.myanimelist.net/v2/anime/{anime_id}?fields=id,title,alternative_titles,status,num_episodes,mean"
+        json_dict = self.send_request(url)
+        return json_dict
+
+    def get_val(self, json_data: str, key: str):
+        try:
+            return json_data[key]
+        except KeyError:
+            return "n/a"
+
+    def search_mal(self, search: str) -> []:
+        ids = []
+        url = f"https://api.myanimelist.net/v2/anime?q={search}&fields=alternative_titles,anime_id"
+        json_dict = self.send_request(url)
+        index = 0
+        for i in json_dict["data"]:
+            id = i["node"]["id"]
+            id_dict = self.send_request(f"https://api.myanimelist.net/v2/anime/{id}?fields=alternative_titles")
+            print(f"  [{index}] : {self.get_name(id_dict)}")
+            ids.append(id)
+            index += 1
+        return ids
 
 
 class Show:
@@ -16,13 +63,13 @@ class Show:
     rating: float       # MAL score of this show
     NA: str = "n/a"     # class constant for "n/a"
 
-    def __init__(self, id: int) -> None:
+    def __init__(self, id: int, mal: MAL) -> None:
         self.id = id
-        json_data = get_info(id)
-        self.name = get_name(json_data)
+        json_data = mal.get_info(id)
+        self.name = mal.get_name(json_data)
         self.is_completed = json_data["status"] == "finished_airing"
-        self.length = get_val(json_data, "num_episodes")
-        mean = get_val(json_data, "mean")
+        self.length = mal.get_val(json_data, "num_episodes")
+        mean = mal.get_val(json_data, "mean")
         self.rating = -1 if mean == self.NA else float(mean)
 
     def __str__(self) -> str:
@@ -105,13 +152,15 @@ class Main:
     CACHE_FILE: str
     LIST_FILE: str
     qb_client: qbittorrentapi.Client
+    mal_client: MAL
     commands: dict = {}
     shows: 'list[Show]' = []
     QBITTORRENT: bool = True
 
-    def __init__(self, cache_file: str, list_file: str):
+    def __init__(self, cache_file: str, list_file: str, client: MAL):
         self.CACHE_FILE = cache_file
         self.LIST_FILE = list_file
+        self.mal_client = client
         self.commands = {"c": self.cmd_check_status,
                          "a": self.cmd_add_to_list,
                          "r": self.cmd_remove_from_list,
@@ -143,6 +192,7 @@ class Main:
             except KeyError:
                 print("Invalid command. Type 'h' or '?' to get help.")
             except KeyboardInterrupt:
+                print("")
                 self.save_list()
                 break
 
@@ -150,18 +200,6 @@ class Main:
             self.qb_client.auth_log_out()    # make sure we log out of our qBittorrent session
 
     def load_list(self) -> None:
-        id_list = []
-        if not os.path.exists(self.LIST_FILE):
-            open(self.LIST_FILE, "w").close()
-            return
-        for line in open(self.LIST_FILE, mode="r").readlines():
-            ids = line.split(",")
-            while "" in ids:
-                ids.remove("")
-            while "\n" in ids:
-                ids.remove("\n")
-            id_list += [int(i) for i in ids]
-
         try:
             with open(self.CACHE_FILE, "rb") as f:
                 self.shows += pickle.load(f)     # load cached shows (ie shows that have finished airing)
@@ -169,41 +207,49 @@ class Main:
         except FileNotFoundError:
             print("No cache file found. If this isn't your first run of the script, make sure you're in the right directory.")
 
-        x = LoadingBar("Loading data from myanimelist.net for uncached shows... ")
+        x = LoadingBar("Refreshing data from myanimelist.net for non 'finished airing' shows... ")
         x.start()
-        for id in id_list:
-            cached = bool(len([show for show in self.shows if show.id == id]))
-            if not cached:  # minimize our calls to MAL API
-                self.shows.append(Show(id))
+        for i in range(len(self.shows)):
+            show = self.shows[i]
+            if not show.is_completed:   # if show isn't finished airing, refresh its data
+                self.shows[i] = Show(show.id, self.mal_client)
         self.shows = sorted(self.shows)
         x.stop()
 
     def save_list(self) -> None:
-        with open(self.LIST_FILE, "w") as f:
-            f.write(",".join([str(i.id) for i in self.shows]))
-        print("\nList saved.")
-        shows_to_cache = [show for show in self.shows if show.is_completed]
+        # with open(self.LIST_FILE, "w") as f:
+        #     f.write(",".join([str(i.id) for i in self.shows]))
+        # print("\nList saved.")
+        # shows_to_cache = [show for show in self.shows if show.is_completed]
         with open(self.CACHE_FILE, "wb") as f:
-            pickle.dump(shows_to_cache, f)   # cache shows that have finished airing
-        print(f"Cached 'finished airing' shows ({len(shows_to_cache)}/{len(self.shows)} total shows).")
+            pickle.dump(self.shows, f)   # cache shows
+        print(f"Cached {len(self.shows)} shows.")
 
     def cmd_check_status(self) -> None:
-        results = search_mal(input("Check status; enter your search query: "))
+        results = self.mal_client.search_mal(input("Check status; enter your search query: "))
         index = get_int_input("What index do you want to check? ")
-        print(Show(results[index]))
+        print(Show(results[index], self.mal_client))
 
     def cmd_add_to_list(self) -> None:
-        results = search_mal(input("Add to list; enter your search query: "))
+        results = self.mal_client.search_mal(input("Add to list; enter your search query: "))
         index = get_int_input("What index do you want to add? ", True)
         if index != "cancelled":
-            self.shows.append(Show(results[index]))
+            show = Show(results[index], self.mal_client)
+            for i in self.shows:
+                if i.id == show.id:
+                    print(f"'{show.name}' already in list, cancelling.")
+                    return
+            self.shows.append(show)
+            print(f"Added '{show.name}' to list.")
 
     def cmd_remove_from_list(self) -> None:
         for i in range(len(self.shows)):
             print(f"  [{i}] : {self.shows[i]}")
         index = get_int_input("What index do you want to remove? ", True)
         if index != "cancelled":
+            show = self.shows[index]
             self.shows.pop(index)
+            print(f"Removed '{show.name}' from list.")
 
     def cmd_search_list(self) -> None:
         query = input("Search list; enter your search query: ").lower()
@@ -241,11 +287,6 @@ class Main:
         print("Commands are (c/a/r/s/cl/q) and listed here:\n - Search and check an invidiual show's status: c\n - Search and add a show to your list: a\n - Remove a show from your list: r\n - Search your list: s\n - Check your whole list's status: cl\n - Search qBittorrent for torrent links: q")
 
 
-#################################
-# Utility Methods               #
-#################################
-
-
 def get_int_input(msg: str, cancellable: bool = False) -> int:
     try:
         msgString = f"{msg}{'(or cancel (c)) ' if cancellable else ''}"
@@ -259,55 +300,5 @@ def get_int_input(msg: str, cancellable: bool = False) -> int:
     return x
 
 
-def send_request(url: str):
-    response = requests.get(url, headers={"Authorization": f"Bearer {ACCESS_TOKEN}"})
-    return ast.literal_eval(response.text)  # converts the json response.text field (essentially a string of response.content) into a python dict
-
-
-def get_name(json_dict: dict):
-    name = json_dict["alternative_titles"]["en"]
-    if name == "":
-        name = json_dict["title"]
-    return name
-
-
-def get_info(anime_id: int):
-    url = f"https://api.myanimelist.net/v2/anime/{anime_id}?fields=id,title,alternative_titles,status,num_episodes,mean"
-    json_dict = send_request(url)
-    return json_dict
-
-
-def get_val(json_data: str, key: str):
-    try:
-        return json_data[key]
-    except KeyError:
-        return "n/a"
-
-
-def search_mal(search: str) -> []:
-    ids = []
-    url = f"https://api.myanimelist.net/v2/anime?q={search}&fields=alternative_titles,anime_id"
-    json_dict = send_request(url)
-    index = 0
-    for i in json_dict["data"]:
-        id = i["node"]["id"]
-        id_dict = send_request(f"https://api.myanimelist.net/v2/anime/{id}?fields=alternative_titles")
-        print(f"  [{index}] : {get_name(id_dict)}")
-        ids.append(id)
-        index += 1
-    return ids
-
-
-#################################
-# Main logic                    #
-#################################
-
 if __name__ == "__main__":
-    # https://myanimelist.net/apiconfig/references/api/v2 <-- api docs
-    # load MAL API tokens -> see refresh_token.py for getting tokens
-    with open("secret_token.json") as f:
-        data = json.load(f)
-        ACCESS_TOKEN = data["access_token"]
-        REFRESH_TOKEN = data["refresh_token"]
-
-    Main("cache.bin", "list.txt").main()
+    Main("cache.bin", "list.txt", MAL("secret_token.json")).main()
