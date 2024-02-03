@@ -150,16 +150,14 @@ class LoadingBar:
 
 class Main:
     CACHE_FILE: str
-    LIST_FILE: str
     qb_client: qbittorrentapi.Client
     mal_client: MAL
     commands: dict = {}
     shows: 'list[Show]' = []
     QBITTORRENT: bool = True
 
-    def __init__(self, cache_file: str, list_file: str, client: MAL):
+    def __init__(self, cache_file: str, client: MAL):
         self.CACHE_FILE = cache_file
-        self.LIST_FILE = list_file
         self.mal_client = client
         self.commands = {"c": self.cmd_check_status,
                          "a": self.cmd_add_to_list,
@@ -217,10 +215,6 @@ class Main:
         x.stop()
 
     def save_list(self) -> None:
-        # with open(self.LIST_FILE, "w") as f:
-        #     f.write(",".join([str(i.id) for i in self.shows]))
-        # print("\nList saved.")
-        # shows_to_cache = [show for show in self.shows if show.is_completed]
         with open(self.CACHE_FILE, "wb") as f:
             pickle.dump(self.shows, f)   # cache shows
         print(f"Cached {len(self.shows)} shows.")
@@ -301,4 +295,4 @@ def get_int_input(msg: str, cancellable: bool = False) -> int:
 
 
 if __name__ == "__main__":
-    Main("cache.bin", "list.txt", MAL("secret_token.json")).main()
+    Main("cache.bin", MAL("secret_token.json")).main()
