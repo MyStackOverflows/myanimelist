@@ -24,18 +24,18 @@ class MAL:
         response = requests.get(url, headers={"Authorization": f"Bearer {self.ACCESS_TOKEN}"})
         return ast.literal_eval(response.text)  # converts the json response.text field (essentially a string of response.content) into a python dict
 
-    def get_name(self, json_dict: dict):
+    def get_name(self, json_dict: dict) -> str:
         name = json_dict["alternative_titles"]["en"]
         if name == "":
             name = json_dict["title"]
         return name
 
-    def get_info(self, anime_id: int):
+    def get_info(self, anime_id: int) -> dict:
         url = f"https://api.myanimelist.net/v2/anime/{anime_id}?fields=id,title,alternative_titles,status,num_episodes,mean"
         json_dict = self.send_request(url)
         return json_dict
 
-    def get_val(self, json_data: str, key: str):
+    def get_val(self, json_data: dict, key: str) -> str:
         try:
             return json_data[key]
         except KeyError:
@@ -156,7 +156,7 @@ class Main:
     shows: 'list[Show]' = []
     QBITTORRENT: bool = True
 
-    def __init__(self, cache_file: str, client: MAL):
+    def __init__(self, cache_file: str, client: MAL) -> None:
         self.CACHE_FILE = cache_file
         self.mal_client = client
         self.commands = {"c": self.cmd_check_status,
@@ -182,7 +182,7 @@ class Main:
         if not self.QBITTORRENT:
             self.commands["q"] = lambda: print("qBittorrent server not found, check your environment variables.")
 
-    def main(self):
+    def main(self) -> None:
         self.load_list()
         while True:
             try:
