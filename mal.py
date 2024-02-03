@@ -182,15 +182,15 @@ class Main:
         if not self.QBITTORRENT:
             self.commands["q"] = lambda: print("qBittorrent server not found, check your environment variables.")
 
-    def main(self) -> None:
         self.load_list()
+
+    def main(self) -> None:
         while True:
             try:
                 self.commands[input(">>> ").lower()]()
             except KeyError:
                 print("Invalid command. Type 'h' or '?' to get help.")
             except KeyboardInterrupt:
-                print("")
                 self.save_list()
                 break
 
@@ -217,7 +217,7 @@ class Main:
     def save_list(self) -> None:
         with open(self.CACHE_FILE, "wb") as f:
             pickle.dump(self.shows, f)   # cache shows
-        print(f"Cached {len(self.shows)} shows.")
+        print(f"\nCached {len(self.shows)} shows.")
 
     def cmd_check_status(self) -> None:
         results = self.mal_client.search_mal(input("Check status; enter your search query: "))
