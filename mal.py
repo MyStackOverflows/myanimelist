@@ -2,6 +2,8 @@ import requests, ast, warnings, json, qbittorrentapi, time, multiprocessing, pic
 # for some reason the MAL API returns the 'main_picture' field even without asking for it and it
 # contains many instances of '\/' which throw a bunch of warnings on screen, so just supress them
 warnings.filterwarnings(action="ignore", category=SyntaxWarning)
+NA = "n/a"
+CANCELLED = "cancelled"
 
 #################################
 # Class Definitions             #
@@ -31,7 +33,7 @@ class MAL:
         return name
 
     def get_info(self, anime_id: int) -> dict:
-        url = f"https://api.myanimelist.net/v2/anime/{anime_id}?fields=id,title,alternative_titles,status,num_episodes,mean"
+        url = f"https://api.myanimelist.net/v2/anime/{anime_id}?fields=id,title,alternative_titles,status,num_episodes,mean,related_anime"
         json_dict = self.send_request(url)
         return json_dict
 
@@ -39,7 +41,7 @@ class MAL:
         try:
             return json_data[key]
         except KeyError:
-            return "n/a"
+            return NA
 
     def search_mal(self, search: str) -> 'list[Show]':
         out = []
@@ -55,34 +57,49 @@ class MAL:
 
 
 class Show:
-    name: str           # name (doh)
-    id: int             # MAL id of this show
-    is_completed: bool  # is this show finished airing
-    length: int         # number of episodes
-    rating: float       # MAL score of this show
-    NA: str = "n/a"     # class constant for "n/a"
+    name: str                           # name (doh)
+    id: int                             # MAL id of this show
+    is_completed: bool                  # is this show finished airing
+    length: int                         # number of episodes
+    rating: float                       # MAL score of this show
+    related_shows: 'list[RelatedShow]'  # dict object of 'related_anime' field of json
 
-    def __init__(self, id: int, mal: MAL) -> None:
+    def __init__(self, id: int, mal: MAL, load_related: bool = True) -> None:
         self.id = id
         json_data = mal.get_info(id)
         self.name = mal.get_name(json_data)
         self.is_completed = json_data["status"] == "finished_airing"
         self.length = mal.get_val(json_data, "num_episodes")
         mean = mal.get_val(json_data, "mean")
-        self.rating = -1 if mean == self.NA else float(mean)
+        self.rating = -1 if mean == NA else float(mean)
+        self.related_shows = [RelatedShow(i, mal) for i in json_data["related_anime"]] if load_related else []
 
     def __str__(self) -> str:
         # https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
         # https://stackoverflow.com/questions/22125114/how-to-insert-links-in-python
         # https://stackoverflow.com/a/46289463
-        info_string = f"{'✓' if self.is_completed else 'X'} : {self.name} | rated {self.rating if self.rating != -1 else self.NA} | {self.length} episodes"
+        info_string = f"{'✓' if self.is_completed else 'X'} : {self.name} | rated {self.rating if self.rating != -1 else NA} | {self.length} episodes"
         url = f"https://myanimelist.net/anime/{self.id}"
         OSC = "\x1b]"   # OSC = operating system command = ESC + ]
         ST = "\x1b\\"   # ST = string terminator = ESC + \
-        return f"  {OSC}8;;{url}{ST}{info_string}{OSC}8;;{ST}"
+        return f" {OSC}8;;{url}{ST}{info_string}{OSC}8;;{ST}"
 
     def __lt__(self, i: 'Show') -> bool:
         return i.rating < self.rating
+
+    def related_shows_to_str(self) -> str:
+        return "\n  " + '\n  '.join([str(i) for i in self.related_shows])
+
+
+class RelatedShow(Show):
+    relation_type: str
+
+    def __init__(self, json: dict, mal: MAL) -> None:
+        super().__init__(json["node"]["id"], mal, False)
+        self.relation_type = json["relation_type_formatted"]
+
+    def __str__(self) -> str:
+        return f"{super().__str__()} | {self.relation_type}"
 
 
 class Torrent:
@@ -163,6 +180,7 @@ class Main:
                          "rl": self.cmd_remove_from_list,
                          "sl": self.cmd_search_list,
                          "cl": self.cmd_check_list,
+                         "vd": self.cmd_view_details,
                          "qb": self.cmd_search_qbittorrent,
                          "h": self.cmd_help,
                          "?": self.cmd_help}
@@ -224,7 +242,7 @@ class Main:
     def cmd_add_to_list(self) -> None:
         results = self.mal_client.search_mal(input("Add to list; enter your search query: "))
         index = get_int_input("What index do you want to add? ", True)
-        if index != "cancelled":
+        if index != CANCELLED:
             show = results[index]
             for i in self.shows:
                 if i.id == show.id:
@@ -237,7 +255,7 @@ class Main:
         for i in range(len(self.shows)):
             print(f"  [{i}] : {self.shows[i]}")
         index = get_int_input("What index do you want to remove? ", True)
-        if index != "cancelled":
+        if index != CANCELLED:
             show = self.shows[index]
             self.shows.pop(index)
             print(f"Removed '{show.name}' from list.")
@@ -251,12 +269,20 @@ class Main:
     def cmd_check_list(self) -> None:
         print('\n'.join([str(i) for i in self.shows]))
 
+    def cmd_view_details(self) -> None:
+        for i in range(len(self.shows)):
+            print(f"  [{i}] : {self.shows[i]}")
+        index = get_int_input("What index do you want to view details for? ", True)
+        if index != CANCELLED:
+            show = self.shows[index]
+            print(f"{show}{show.related_shows_to_str()}")
+
     def cmd_search_qbittorrent(self) -> None:
         finished = [show for show in self.shows if show.is_completed]
         for i in range(len(finished)):
             print(f"  [{i}] : {finished[i]}")
         index = get_int_input("What index do you want to search for on qBittorrent? ", True)
-        if index != "cancelled":
+        if index != CANCELLED:
             show = finished[index]
             query = input("Additional search query (eg `judas`, `batch`, etc): ")
             job = self.qb_client.search_start(f"{show.name}{' ' + query if len(query) > 0 else ''}", "nyaasi", "all")
@@ -269,7 +295,7 @@ class Main:
             for i in range(10 if len(torrents) >= 10 else len(torrents)):
                 print(f"  [{i}] : {torrents[i]}")
             index = get_int_input("What index do you want to download with qBittorrent? ", True)
-            if index != "cancelled":
+            if index != CANCELLED:
                 torrent = torrents[index]
                 self.qb_client.torrents.add([torrent.file_url])
                 print("Torrent added successfully.")
@@ -281,6 +307,7 @@ class Main:
               "\n  rl : Remove a show from your list" +
               "\n  sl : Search your list" +
               "\n  cl : Check status of your list" +
+              "\n  vd : View a specific anime in more detail" +
               "\n  qb : Search qBittorrent for torrent links")
 
 
@@ -289,7 +316,7 @@ def get_int_input(msg: str, cancellable: bool = False) -> int:
         msgString = f"{msg}{'(or cancel (c)) ' if cancellable else ''}"
         i = input(msgString).lower()
         if cancellable and i == "c":
-            return "cancelled"
+            return CANCELLED
         x = int(i)
     except ValueError:
         print("Invalid, please enter an integer.")
