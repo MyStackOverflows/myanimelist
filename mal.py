@@ -41,18 +41,17 @@ class MAL:
         except KeyError:
             return "n/a"
 
-    def search_mal(self, search: str) -> []:
-        ids = []
+    def search_mal(self, search: str) -> 'list[Show]':
+        out = []
         url = f"https://api.myanimelist.net/v2/anime?q={search}&fields=alternative_titles,anime_id"
         json_dict = self.send_request(url)
         index = 0
         for i in json_dict["data"]:
-            id = i["node"]["id"]
-            id_dict = self.send_request(f"https://api.myanimelist.net/v2/anime/{id}?fields=alternative_titles")
-            print(f"  [{index}] : {self.get_name(id_dict)}")
-            ids.append(id)
+            show = Show(i["node"]["id"], self)
+            print(f"  [{index}] : {show}")
+            out.append(show)
             index += 1
-        return ids
+        return out
 
 
 class Show:
@@ -159,12 +158,12 @@ class Main:
     def __init__(self, cache_file: str, client: MAL) -> None:
         self.CACHE_FILE = cache_file
         self.mal_client = client
-        self.commands = {"c": self.cmd_check_status,
-                         "a": self.cmd_add_to_list,
-                         "r": self.cmd_remove_from_list,
-                         "s": self.cmd_search_list,
+        self.commands = {"sm": self.cmd_search_mal,
+                         "al": self.cmd_add_to_list,
+                         "rl": self.cmd_remove_from_list,
+                         "sl": self.cmd_search_list,
                          "cl": self.cmd_check_list,
-                         "q": self.cmd_search_qbittorrent,
+                         "qb": self.cmd_search_qbittorrent,
                          "h": self.cmd_help,
                          "?": self.cmd_help}
 
@@ -180,7 +179,7 @@ class Main:
             self.QBITTORRENT = False
             print("qBittorrent server not found, check your environment variables.")
         if not self.QBITTORRENT:
-            self.commands["q"] = lambda: print("qBittorrent server not found, check your environment variables.")
+            self.commands["qb"] = lambda: print("qBittorrent server not found, check your environment variables.")
 
         self.load_list()
 
@@ -219,16 +218,14 @@ class Main:
             pickle.dump(self.shows, f)   # cache shows
         print(f"\nCached {len(self.shows)} shows.")
 
-    def cmd_check_status(self) -> None:
-        results = self.mal_client.search_mal(input("Check status; enter your search query: "))
-        index = get_int_input("What index do you want to check? ")
-        print(Show(results[index], self.mal_client))
+    def cmd_search_mal(self) -> None:
+        self.mal_client.search_mal(input("Search MAL; enter your search query: "))
 
     def cmd_add_to_list(self) -> None:
         results = self.mal_client.search_mal(input("Add to list; enter your search query: "))
         index = get_int_input("What index do you want to add? ", True)
         if index != "cancelled":
-            show = Show(results[index], self.mal_client)
+            show = results[index]
             for i in self.shows:
                 if i.id == show.id:
                     print(f"'{show.name}' already in list, cancelling.")
@@ -278,7 +275,13 @@ class Main:
                 print("Torrent added successfully.")
 
     def cmd_help(self) -> None:
-        print("Commands are (c/a/r/s/cl/q) and listed here:\n - Search and check an invidiual show's status: c\n - Search and add a show to your list: a\n - Remove a show from your list: r\n - Search your list: s\n - Check your whole list's status: cl\n - Search qBittorrent for torrent links: q")
+        print("Commands are listed here:" +
+              "\n  sm : Search MAL directly" +
+              "\n  al : Search MAL and add a show to your List" +
+              "\n  rl : Remove a show from your list" +
+              "\n  sl : Search your list" +
+              "\n  cl : Check status of your list" +
+              "\n  qb : Search qBittorrent for torrent links")
 
 
 def get_int_input(msg: str, cancellable: bool = False) -> int:
