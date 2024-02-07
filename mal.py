@@ -158,7 +158,7 @@ class LoadingBar:
             done = int.from_bytes(self.memory.buf[4:], "big") == 1
             percent = ""
             if self.total != -1:
-                percent = f" {int.from_bytes(self.memory.buf[:4], "big") / self.total * 100:.2f}%"
+                percent = f" {int.from_bytes(self.memory.buf[:4], 'big') / self.total * 100:.2f}%"
             print(f"\r {self.prefix}{self.cycle[index % length]}{percent}", end="\r", flush=True)
             index += 1
             time.sleep(0.1)
