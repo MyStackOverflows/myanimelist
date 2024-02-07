@@ -155,10 +155,10 @@ class LoadingBar:
         index = 0
         done = False
         while not done:
-            done = int.from_bytes(self.memory.buf[4:]) == 1
+            done = int.from_bytes(self.memory.buf[4:], "big") == 1
             percent = ""
             if self.total != -1:
-                percent = f" {int.from_bytes(self.memory.buf[:4]) / self.total * 100:.2f}%"
+                percent = f" {int.from_bytes(self.memory.buf[:4], "big") / self.total * 100:.2f}%"
             print(f"\r {self.prefix}{self.cycle[index % length]}{percent}", end="\r", flush=True)
             index += 1
             time.sleep(0.1)
@@ -168,7 +168,7 @@ class LoadingBar:
         Process(target=self.loading).start()
 
     def stop(self) -> None:
-        self.memory.buf[4:] = int.to_bytes(1, 1)    # set the 'done' flag
+        self.memory.buf[4:] = int.to_bytes(1, 1, "big")    # set the 'done' flag
         time.sleep(0.2)    # sleep for 200ms to make sure the loading process exits properly before we unlink the shared memory
         self.memory.unlink()
         print(f"\r{' ' * (len(self.prefix) + len(self.cycle[0]) + 9)}", end="\r", flush=True)   # +8 for the ' 100.00%' and +1 for the space before the prefix
@@ -176,7 +176,7 @@ class LoadingBar:
 
     def update(self) -> None:
         self.completed += 1
-        self.memory.buf[:4] = self.completed.to_bytes(4)
+        self.memory.buf[:4] = self.completed.to_bytes(4, "big")
 
 
 class Main:
