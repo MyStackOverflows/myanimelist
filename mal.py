@@ -138,19 +138,20 @@ class Torrent:
 class LoadingBar:
     prefix: str     # text to put before the loading bar
     process: multiprocessing.Process    # instance of the internal process
+    cycle: 'list[str]' = ["⠋", "⠙", "⠚", "⠞", "⠖", "⠦", "⠴", "⠲", "⠳", "⠓"]
 
     def __init__(self, prefix: str = "") -> None:
         self.prefix = prefix
 
     def loading(self) -> None:
-        cycle = ["-", "\\", "|", "/"]
-        cycle = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-        cycle = ["⢎⡰", "⢎⡡", "⢎⡑", "⢎⠱", "⠎⡱", "⢊⡱", "⢌⡱", "⢆⡱"]
-        cycle = ["⠋", "⠙", "⠚", "⠞", "⠖", "⠦", "⠴", "⠲", "⠳", "⠓"]
-        length = len(cycle)
+        # cycle = ["-", "\\", "|", "/"]
+        # cycle = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        # cycle = ["⢎⡰", "⢎⡡", "⢎⡑", "⢎⠱", "⠎⡱", "⢊⡱", "⢌⡱", "⢆⡱"]
+        # cycle = ["⠋", "⠙", "⠚", "⠞", "⠖", "⠦", "⠴", "⠲", "⠳", "⠓"]
+        length = len(self.cycle)
         index = 0
         while True:
-            print(f"\r {self.prefix}{cycle[index % length]}", end="\r", flush=True)
+            print(f"\r {self.prefix}{self.cycle[index % length]}", end="\r", flush=True)
             index += 1
             time.sleep(0.1)
 
@@ -160,7 +161,7 @@ class LoadingBar:
 
     def stop(self) -> None:
         self.process.kill()
-        print(f"\r{' ' * (len(self.prefix) + 5)}", end="\r", flush=True)  # the +5 is just for good measure in case the cycle we're using has >1 width etc
+        print(f"\r{' ' * (len(self.prefix) + len(self.cycle[0]))}", end="\r", flush=True)
         print(f"{self.prefix}done.")
 
 
@@ -180,6 +181,7 @@ class Main:
                          "rl": self.cmd_remove_from_list,
                          "sl": self.cmd_search_list,
                          "cl": self.cmd_check_list,
+                         "re": self.cmd_refresh_list,
                          "vd": self.cmd_view_details,
                          "qb": self.cmd_search_qbittorrent,
                          "h": self.cmd_help,
@@ -269,6 +271,14 @@ class Main:
     def cmd_check_list(self) -> None:
         print('\n'.join([str(i) for i in self.shows]))
 
+    def cmd_refresh_list(self) -> None:
+        x = LoadingBar("Refreshing data from myanimelist.net for your list... ")
+        x.start()
+        for i in range(len(self.shows)):
+            show = self.shows[i]
+            self.shows[i] = Show(show.id, self.mal_client)
+        x.stop()
+
     def cmd_view_details(self) -> None:
         for i in range(len(self.shows)):
             print(f"  [{i}] : {self.shows[i]}")
@@ -305,6 +315,7 @@ class Main:
               "\n  sm : Search MAL directly" +
               "\n  al : Search MAL and add a show to your List" +
               "\n  rl : Remove a show from your list" +
+              "\n  re : Refetch data for the whole list" +
               "\n  sl : Search your list" +
               "\n  cl : Check status of your list" +
               "\n  vd : View a specific anime in more detail" +
