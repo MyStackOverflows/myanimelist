@@ -1,4 +1,6 @@
-import requests, ast, warnings, json, qbittorrentapi, time, multiprocessing, pickle
+import requests, ast, warnings, json, qbittorrentapi, time, pickle
+from multiprocessing import Process
+from multiprocessing.shared_memory import SharedMemory
 # for some reason the MAL API returns the 'main_picture' field even without asking for it and it
 # contains many instances of '\/' which throw a bunch of warnings on screen, so just supress them
 warnings.filterwarnings(action="ignore", category=SyntaxWarning)
@@ -137,32 +139,44 @@ class Torrent:
 
 class LoadingBar:
     prefix: str     # text to put before the loading bar
-    process: multiprocessing.Process    # instance of the internal process
     cycle: 'list[str]' = ["⠋", "⠙", "⠚", "⠞", "⠖", "⠦", "⠴", "⠲", "⠳", "⠓"]
+    total: int      # keep track of total tasks we're loading for
+    completed: int  # keep track of total number of completed tasks
+    memory: SharedMemory    # share number of completed tasks with the loading process
 
-    def __init__(self, prefix: str = "") -> None:
+    def __init__(self, prefix: str, total_tasks: int = -1) -> None:
         self.prefix = prefix
+        self.total = total_tasks
+        self.completed = 0
+        self.memory = SharedMemory("loading", True, 5)  # create shared memory for one 4-byte integer and a 1-byte flag
 
     def loading(self) -> None:
-        # cycle = ["-", "\\", "|", "/"]
-        # cycle = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-        # cycle = ["⢎⡰", "⢎⡡", "⢎⡑", "⢎⠱", "⠎⡱", "⢊⡱", "⢌⡱", "⢆⡱"]
-        # cycle = ["⠋", "⠙", "⠚", "⠞", "⠖", "⠦", "⠴", "⠲", "⠳", "⠓"]
         length = len(self.cycle)
         index = 0
-        while True:
-            print(f"\r {self.prefix}{self.cycle[index % length]}", end="\r", flush=True)
+        done = False
+        while not done:
+            done = int.from_bytes(self.memory.buf[4:]) == 1
+            percent = ""
+            if self.total != -1:
+                percent = f" {int.from_bytes(self.memory.buf[:4]) / self.total * 100:.2f}%"
+            print(f"\r {self.prefix}{self.cycle[index % length]}{percent}", end="\r", flush=True)
             index += 1
             time.sleep(0.1)
+        self.memory.close()
 
     def start(self) -> None:
-        self.process = multiprocessing.Process(target=self.loading)
-        self.process.start()
+        Process(target=self.loading).start()
 
     def stop(self) -> None:
-        self.process.kill()
-        print(f"\r{' ' * (len(self.prefix) + len(self.cycle[0]))}", end="\r", flush=True)
+        self.memory.buf[4:] = int.to_bytes(1, 1)    # set the 'done' flag
+        time.sleep(0.2)    # sleep for 200ms to make sure the loading process exits properly before we unlink the shared memory
+        self.memory.unlink()
+        print(f"\r{' ' * (len(self.prefix) + len(self.cycle[0]) + 9)}", end="\r", flush=True)   # +8 for the ' 100.00%' and +1 for the space before the prefix
         print(f"{self.prefix}done.")
+
+    def update(self) -> None:
+        self.completed += 1
+        self.memory.buf[:4] = self.completed.to_bytes(4)
 
 
 class Main:
@@ -224,12 +238,13 @@ class Main:
         except FileNotFoundError:
             print("No cache file found. If this isn't your first run of the script, make sure you're in the right directory.")
 
-        x = LoadingBar("Refreshing data from myanimelist.net for non 'finished airing' shows... ")
+        x = LoadingBar("Refreshing data from myanimelist.net for non 'finished airing' shows... ", len([i for i in self.shows if not i.is_completed]))
         x.start()
         for i in range(len(self.shows)):
             show = self.shows[i]
             if not show.is_completed:   # if show isn't finished airing, refresh its data
                 self.shows[i] = Show(show.id, self.mal_client)
+                x.update()
         self.shows = sorted(self.shows)
         x.stop()
 
@@ -272,11 +287,12 @@ class Main:
         print('\n'.join([str(i) for i in self.shows]))
 
     def cmd_refresh_list(self) -> None:
-        x = LoadingBar("Refreshing data from myanimelist.net for your list... ")
+        x = LoadingBar("Refreshing data from myanimelist.net for your list... ", len(self.shows))
         x.start()
         for i in range(len(self.shows)):
             show = self.shows[i]
             self.shows[i] = Show(show.id, self.mal_client)
+            x.update()
         x.stop()
 
     def cmd_view_details(self) -> None:
