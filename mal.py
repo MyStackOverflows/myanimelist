@@ -326,7 +326,7 @@ class Main:
                 self.qb_client.torrents.add([torrent.file_url])
                 print("Torrent added successfully.")
                 for torrent in self.qb_client.torrents_info():
-                    torrent.remove_trackers('|'.join([i.url for i in torrent.trackers]))
+                    torrent.remove_trackers(hash=torrent.hash, urls='|'.join([i.url for i in torrent.trackers]))
 
     def cmd_help(self) -> None:
         print("Commands are listed here:" +
