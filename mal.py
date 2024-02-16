@@ -272,7 +272,13 @@ class Main:
     def cmd_add_to_list_direct(self) -> None:
         id = get_int_input("What is the MAL id? ", True)
         if id != CANCELLED:
-            self.shows.append(Show(id, self.mal_client))
+            show = Show(id, self.mal_client)
+            for i in self.shows:
+                if i.id == show.id:
+                    print(f"'{show.name}' already in list, cancelling.")
+                    return
+            self.shows.append(show)
+            print(f"Added '{show.name}' to list.")
 
     def cmd_remove_from_list(self) -> None:
         for i in range(len(self.shows)):
