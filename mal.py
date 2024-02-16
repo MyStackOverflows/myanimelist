@@ -192,6 +192,7 @@ class Main:
         self.mal_client = client
         self.commands = {"sm": self.cmd_search_mal,
                          "al": self.cmd_add_to_list,
+                         "ad": self.cmd_add_to_list_direct,
                          "rl": self.cmd_remove_from_list,
                          "sl": self.cmd_search_list,
                          "cl": self.cmd_check_list,
@@ -268,6 +269,11 @@ class Main:
             self.shows.append(show)
             print(f"Added '{show.name}' to list.")
 
+    def cmd_add_to_list_direct(self) -> None:
+        id = get_int_input("What is the MAL id? ", True)
+        if id != CANCELLED:
+            self.shows.append(Show(id, self.mal_client))
+
     def cmd_remove_from_list(self) -> None:
         for i in range(len(self.shows)):
             print(f"  [{i}] : {self.shows[i]}")
@@ -332,6 +338,7 @@ class Main:
         print("Commands are listed here:" +
               "\n  sm : Search MAL directly" +
               "\n  al : Search MAL and add a show to your List" +
+              "\n  ad : Add directly via anime id on MAL (use if search isn't working)" +
               "\n  rl : Remove a show from your list" +
               "\n  re : Refetch data for the whole list" +
               "\n  sl : Search your list" +
