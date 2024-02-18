@@ -254,6 +254,10 @@ class Main:
             pickle.dump(self.shows, f)   # cache shows
         print(f"\nCached {len(self.shows)} shows.")
 
+    def search_list(self) -> 'list[Show]':
+        query = input("Enter your search query: ").lower()
+        return [show for show in self.shows if query in str(show).lower()]
+
     def cmd_search_mal(self) -> None:
         self.mal_client.search_mal(input("Search MAL; enter your search query: "))
 
@@ -281,12 +285,13 @@ class Main:
             print(f"Added '{show.name}' to list.")
 
     def cmd_remove_from_list(self) -> None:
-        for i in range(len(self.shows)):
-            print(f"  [{i}] : {self.shows[i]}")
+        shows = self.search_list()
+        for i in range(len(shows)):
+            print(f"  [{i}] : {shows[i]}")
         index = get_int_input("What index do you want to remove? ", True)
         if index != CANCELLED:
-            show = self.shows[index]
-            self.shows.pop(index)
+            show = shows[index]
+            self.shows.remove(show)
             print(f"Removed '{show.name}' from list.")
 
     def cmd_search_list(self) -> None:
@@ -308,15 +313,17 @@ class Main:
         x.stop()
 
     def cmd_view_details(self) -> None:
-        for i in range(len(self.shows)):
-            print(f"  [{i}] : {self.shows[i]}")
+        shows = self.search_list()
+        for i in range(len(shows)):
+            print(f"  [{i}] : {shows[i]}")
         index = get_int_input("What index do you want to view details for? ", True)
         if index != CANCELLED:
-            show = self.shows[index]
+            show = shows[index]
             print(f"{show}{show.related_shows_to_str()}")
 
     def cmd_search_qbittorrent(self) -> None:
-        finished = [show for show in self.shows if show.is_completed]
+        shows = self.search_list()
+        finished = [show for show in shows if show.is_completed]
         for i in range(len(finished)):
             print(f"  [{i}] : {finished[i]}")
         index = get_int_input("What index do you want to search for on qBittorrent? ", True)
