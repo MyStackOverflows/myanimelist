@@ -15,8 +15,11 @@ CANCELLED = "cancelled"
 class MAL:
     ACCESS_TOKEN: str
     REFRESH_TOKEN: str
+    last_request: float
+    timeout: float = 0.5
 
     def __init__(self, token_file: str) -> None:
+        self.last_request = time.time()
         # https://myanimelist.net/apiconfig/references/api/v2 <-- api docs
         # load MAL API tokens -> see refresh_token.py for getting tokens
         with open(token_file) as f:
@@ -25,7 +28,11 @@ class MAL:
             self.REFRESH_TOKEN = data["refresh_token"]
 
     def send_request(self, url: str) -> dict:
+        diff = (time.time() - self.last_request)
+        if diff < self.timeout:
+            time.sleep(diff)
         response = requests.get(url, headers={"Authorization": f"Bearer {self.ACCESS_TOKEN}"})
+        self.last_request = time.time()
         return ast.literal_eval(response.text)  # converts the json response.text field (essentially a string of response.content) into a python dict
 
     def get_name(self, json_dict: dict) -> str:
