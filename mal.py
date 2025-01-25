@@ -42,7 +42,7 @@ class MAL:
         return name
 
     def get_info(self, anime_id: int) -> dict:
-        url = f"https://api.myanimelist.net/v2/anime/{anime_id}?fields=id,title,alternative_titles,status,num_episodes,mean,related_anime"
+        url = f"https://api.myanimelist.net/v2/anime/{anime_id}?fields=id,title,alternative_titles,status,num_episodes,mean,related_anime,start_season,genres"
         json_dict = self.send_request(url)
         return json_dict
 
@@ -72,8 +72,10 @@ class Show:
     length: int                         # number of episodes
     rating: float                       # MAL score of this show
     related_shows: 'list[RelatedShow]'  # dict object of 'related_anime' field of json
+    start_season: str			# 'spring 2014', 'summer 2023', etc
+    genres: []
 
-    def __init__(self, id: int, mal: MAL, load_related: bool = True) -> None:
+    def __init__(self, id: int, mal: MAL, load_related: bool = False) -> None:
         self.id = id
         json_data = mal.get_info(id)
         self.name = mal.get_name(json_data)
@@ -82,12 +84,22 @@ class Show:
         mean = mal.get_val(json_data, "mean")
         self.rating = -1 if mean == NA else float(mean)
         self.related_shows = [RelatedShow(i, mal) for i in json_data["related_anime"]] if load_related else []
+        try:
+            self.start_season = json_data["start_season"]["season"] + " " + str(json_data["start_season"]["year"])
+        except KeyError:
+            self.start_season = "unknown release season"
+        self.genres = []
+        try:
+            for genre in json_data["genres"]:	# will be an array of form [{id: some_num, name: "string describing genre"}, {id: some_other_num, name: "string describing genre"}]
+                self.genres.append(genre["name"])
+        except KeyError: # no genres yet
+            self.genres = ["No genres yet"]
 
     def __str__(self) -> str:
         # https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
         # https://stackoverflow.com/questions/22125114/how-to-insert-links-in-python
         # https://stackoverflow.com/a/46289463
-        info_string = f"{'✓' if self.is_completed else 'X'} : {self.name} | rated {self.rating if self.rating != -1 else NA} | {self.length} episodes"
+        info_string = f"{'✓' if self.is_completed else 'X'} : {self.name} | rated {self.rating if self.rating != -1 else NA} | {self.length} episodes | {self.start_season.title()} | {', '.join(self.genres)}"
         url = f"https://myanimelist.net/anime/{self.id}"
         OSC = "\x1b]"   # OSC = operating system command = ESC + ]
         ST = "\x1b\\"   # ST = string terminator = ESC + \
@@ -206,6 +218,7 @@ class Main:
                          "re": self.cmd_refresh_list,
                          "vd": self.cmd_view_details,
                          "qb": self.cmd_search_qbittorrent,
+                         "qbd": self.cmd_search_qbittorrent_direct,
                          "h": self.cmd_help,
                          "?": self.cmd_help}
 
@@ -337,7 +350,7 @@ class Main:
         if index != CANCELLED:
             show = finished[index]
             query = input("Additional search query (eg `judas`, `batch`, etc): ")
-            job = self.qb_client.search_start(f"{show.name}{' ' + query if len(query) > 0 else ''}", "nyaasi", "all")
+            job = self.qb_client.search_start(f"{show.name}{' ' + query if len(query) > 0 else ''}", "nyaasi", "anime")
             x = LoadingBar("Searching with qBittorrent... ")
             x.start()
             while job.status()[0]["status"] == "Running":
@@ -351,6 +364,23 @@ class Main:
                 torrent = torrents[index]
                 self.qb_client.torrents.add([torrent.file_url])
                 print("Torrent added successfully.")
+
+    def cmd_search_qbittorrent_direct(self) -> None:
+        query = input("Search qbittorrent, enter your query: ")
+        job = self.qb_client.search_start(query, "all", "all")
+        x = LoadingBar("Searching with qBittorrent... ")
+        x.start()
+        while job.status()[0]["status"] == "Running":
+            pass
+        x.stop()
+        torrents = sorted([Torrent(i) for i in job.results()["results"]])
+        for i in range(10 if len(torrents) >= 10 else len(torrents)):
+            print(f"  [{i}] : {torrents[i]}")
+        index = get_int_input("What index do you want to download with qBittorrent? ", True)
+        if index != CANCELLED:
+            torrent = torrents[index]
+            self.qb_client.torrents.add([torrent.file_url])
+            print("Torrent added successfully.")
 
     def cmd_help(self) -> None:
         print("Commands are listed here:" +
